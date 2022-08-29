@@ -1,13 +1,83 @@
+import time
+import tkinter as tk
+from tkinter import simpledialog
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver import ActionChains
 from selenium.webdriver import Chrome
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import NoAlertPresentException
 from selenium.common import exceptions
 from time import sleep
 from multiprocessing import Queue
+from tkinter import Tk
+from tkinter.filedialog import askopenfilename
+from mark.common import Prerequisites
+import json
+
+def check_for_file(visited):
+    while True:
+
+        try:
+            line = input("Do you want to save those links? [y/n] ")
+            if line == 'y':
+                with open('datafile.json', 'w') as file:
+                    json.dump(visited, file)
+                    break
+            if line == 'n':
+                # print('adsfasdfasdfasdfafdsf')
+                break
+            else:
+                print('asdfasdfasdf')
+                continue
+
+        except EOFError:
+            break
+
+
+def greetings_and_creation():
+    print("You are the chosen one to be honored to test pre-alpha of Mark1 By Dedede12345.\n Cheers!!!", )
+
+    gmail = input(
+        "Enter your gmail: "
+    )
+
+    password = input(
+        "Enter your password: "
+    )
+
+    text = input(
+        'Enter or paste your post text: '
+    )
+
+    return Prerequisites(gmail, password, text)
+
+
+def choose_images(post: Prerequisites):
+
+    counter = 0
+
+    while True:
+
+
+        if (line:=input(f'Pass{" another" * (counter > 0)} image into a post? [y/n] ')) == 'y': # line:=input('Pass image into a post [y/n] ') == 'y'
+
+            Tk().withdraw()
+            filename = askopenfilename()
+            post.images.append(filename)
+
+            counter += 1
+
+            continue
+
+        elif line == 'n':
+            print(f'{counter} image{"s" * (counter > 1)} has been passed')
+            break
+
+        else:
+
+            print(f'Wrong char({line}) try again.')
+            continue
 
 
 def get_element(driver, xpath):
@@ -16,10 +86,17 @@ def get_element(driver, xpath):
     :return:
     """
 
+
     try:
         element = WebDriverWait(driver, 10).until(
             expected_conditions.presence_of_element_located((By.XPATH, xpath))
         )
+        # driver.switch_to.alert.accept()
+        try:
+            alert = driver.switch_to.alert
+            alert.accept()
+        except NoAlertPresentException:
+            pass
     except Exception as e:
         raise e
 
@@ -34,11 +111,23 @@ def input_submit(driver, input, submit, value):
     :param submit: 
     :return: 
     """
+    #
+    # time.sleep(1.5)
+
+
     ActionChains(driver).\
         click(input).\
         send_keys(value).\
         click(submit)\
         .perform()
+
+    time.sleep(1)
+
+    try:
+        alert = driver.switch_to.alert
+        alert.accept()
+    except:
+        pass
 
 
 def register(driver: Chrome, gmail, password, link='https://vk.com'):
@@ -85,7 +174,7 @@ def propose_images(driver, images: list):
                                                          'div[2]/div/div[1]/div/div[1]/input')
         send_photo_button.send_keys(rf'{image}')
 
-        sleep(1.5)
+        sleep(3)
 
 
 def propose_text(driver, text):
@@ -101,7 +190,7 @@ def propose_post(driver: Chrome, public_link: str, text, images=None):
     if not public_link.startswith('https://vk.com'):
         public_link = f'https://vk.com{public_link}'
 
-    # print(f'public_link = {public_link}')
+    print(f'Sending post to : {public_link}')
 
     driver.get(public_link)
 
@@ -120,79 +209,19 @@ def propose_post(driver: Chrome, public_link: str, text, images=None):
     ActionChains(driver).click(submit_button).perform()
 
 
-def main(gmail=None, password=None, text=None, images=None):
+def get_links_json(queue: Queue):
 
-    chrome_options = Options()
-    chrome_options.add_argument('--headless')
+    with open('datafile.json', 'r') as file:
+        links = json.load(file)
 
-    driver = Chrome(
-        ChromeDriverManager().install()
-    )
+        for link in links:
+            queue.put(link)
 
-    register(driver, gmail, password)
-
-    sleep(4)
-
-    print(get_links(driver))
-
-    sleep(2.5)
-
-
-    for public in get_links(driver):
-
-        propose_post(driver, public, text, images)
-
-        sleep(2.5)
-
-    driver.close()
-
-
-def get_links(driver: Chrome):
-
-    ActionChains(driver).click(get_element(driver, '//a[@href="/groups"]')).perform()
-
-    sleep(2.5)
-
-    try:
-
-        WebDriverWait(driver, 5).until(
-            expected_conditions.presence_of_element_located((By.XPATH, '//a[@href]'))
-        )
-    finally:
-
-        links = driver.find_elements(By.XPATH, '//a[@class="group_row_title"]')
-        links = [link.get_attribute('href') for link in links]
-
-    # Check links
-
-    verified_links = []
-
-    for link in links:
-
-        if not link.startswith('https://'):
-            driver.get(f'https://vk.com{link}')
-
-        else:
-            driver.get(link)
-
-            try:
-
-                WebDriverWait(driver, 3).until(
-                    expected_conditions.presence_of_element_located((By.XPATH, '//*[@id="post_field"]'))
-                )
-
-            except:
-                continue
-
-            finally:
-
-                verified_links.append(link)
-
-
-    return links
 
 def get_links_queue(driver: Chrome, queue: Queue):
 
+    visited = []
+
     ActionChains(driver).click(get_element(driver, '//a[@href="/groups"]')).perform()
 
     sleep(2.5)
@@ -205,28 +234,71 @@ def get_links_queue(driver: Chrome, queue: Queue):
     finally:
 
         links = driver.find_elements(By.XPATH, '//a[@class="group_row_title"]')
-        links = [link.get_attribute('href') for link in links]
+        links = list(set(link.get_attribute('href') for link in links))
+
+        # links = set(Public(link.get_attribute('href'), link.text) for link in links)
+
+        print(f'raw {len(links)} links: ', links, '\n' * 2)
 
     # Check links
+
+
     for link in links:
         driver.get(link)
 
+
         try:
             driver.find_element('xpath', '//*[@id="post_field"]')
+            public_name = driver.find_element('tag name', 'h1').text
+            # public = Public(link, public_name)
         except:
             print(f"Public {link.replace('https://vk.com/', '')} has no posting fields")
             continue
-        # finally:
-        #     print(f"{link} has element {element}")
 
-        print(link)
+        ROOT = tk.Tk()
 
-        queue.put(link)
+        ROOT.withdraw()
+
+        User_inp = simpledialog.askstring(title="Posting", prompt=f"Send post to {public_name}? [y/n]")
+
+        if User_inp == 'y':
+            queue.put(link)
+            visited.append(link)
+
+        elif User_inp == 'n':
+            continue
+
+        else:
+            continue
+
+    print(f"Filtered links: {visited}")
+
+    check_for_file(visited)
+
+    return visited
+
+        # queue.put(link)
 
 
-#
-# main(
-#     gmail='testingmak390@gmail.com',
-#     password='testing1!',
-#     text='Another testing one, for fox\'s sake',
-#     images=[r'D:\Мои документы\Изображения\real shit man\Портрет_агронома_М.Е._Вьюнникова.jpg'])
+def clean_queue(raw_queue: Queue, filtered_queue):
+
+    while True:
+
+        if not raw_queue.get():
+            time.sleep(0.1)
+
+        else:
+            public = raw_queue.get()
+
+            while True:
+
+                if (line:= input(f'Send post to {public.name}')) == 'y':
+                    filtered_queue.put(public.link)
+                    break
+
+                elif line == 'n':
+                    break
+
+                else:
+                    print(f"Wrong char {line} try again")
+                    continue
